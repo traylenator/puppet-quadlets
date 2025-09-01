@@ -43,18 +43,6 @@ describe 'quadlets::quadlet' do
           before  => User['containers'],
         }
         # end hacks to make it work on rootless in rootless container
-        user{'containers':
-          ensure     => present,
-          managehome => true,
-        }
-        loginctl_user{'containers':
-          linger  => enabled,
-        }
-        file{['/home/containers/.config', '/home/containers/.config/containers', '/home/containers/.config/containers/systemd']:
-          ensure => directory,
-          owner  => 'containers',
-          group  => 'containers',
-        }
         quadlets::quadlet{'centos-user.container':
           ensure          => present,
           user            => {

@@ -218,6 +218,60 @@ quadlets::quadlet{'centos.container':
 }
 ```
 
+##### Run a CentOS user Container specifying home dir
+
+```puppet
+quadlets::quadlet{'centos.container':
+  ensure          => present,
+  user            =>
+   'name'    => 'containers',
+   'homedir' => '/nfs/home/containers',
+  },
+  unit_entry     => {
+   'Description' => 'Trivial Container that will be very lazy',
+  },
+  service_entry       => {
+    'TimeoutStartSec' => '900',
+  },
+  container_entry => {
+    'Image' => 'quay.io/centos/centos:latest',
+    'Exec'  => 'sh -c "sleep inf"'
+  },
+  install_entry   => {
+    'WantedBy' => 'default.target'
+  },
+  active          => true,
+}
+```
+
+##### Run a CentOS user Container without managing the aspects of the user
+
+```puppet
+quadlets::quadlet{'centos.container':
+  ensure          => present,
+  user            =>
+   'name'          => 'containers',
+   'create_dir'    => false,
+   'manage_user'   => false,
+   'manage_linger' => false,
+  },
+  unit_entry     => {
+   'Description' => 'Trivial Container that will be very lazy',
+  },
+  service_entry       => {
+    'TimeoutStartSec' => '900',
+  },
+  container_entry => {
+    'Image' => 'quay.io/centos/centos:latest',
+    'Exec'  => 'sh -c "sleep inf"'
+  },
+  install_entry   => {
+    'WantedBy' => 'default.target'
+  },
+  active          => true,
+}
+```
+
 #### Parameters
 
 The following parameters are available in the `quadlets::quadlet` defined type:
@@ -372,7 +426,10 @@ Alias of
 ```puppet
 Struct[name => String[1],
   Optional['group'] => String[1],
-  Optional['homedir'] => String[1]]
+  Optional['homedir'] => String[1],
+  Optional['create_dir'] => Boolean,
+  Optional['manage_user'] => Boolean,
+  Optional['manage_linger'] => Boolean]
 ```
 
 ### <a name="Quadlets--Unit--Container"></a>`Quadlets::Unit::Container`

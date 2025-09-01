@@ -4,4 +4,7 @@ type Quadlets::Quadlet_user = Struct[
   name => String[1],
   Optional['group'] => String[1],
   Optional['homedir'] => String[1],
+  Optional['create_dir'] => Boolean,
+  Optional['manage_user'] => Boolean,
+  Optional['manage_linger'] => Boolean,
 ]

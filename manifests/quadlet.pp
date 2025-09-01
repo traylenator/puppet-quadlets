@@ -51,6 +51,54 @@
 #     active          => true,
 #   }
 #
+# @example Run a CentOS user Container specifying home dir
+#   quadlets::quadlet{'centos.container':
+#     ensure          => present,
+#     user            =>
+#      'name'    => 'containers',
+#      'homedir' => '/nfs/home/containers',
+#     },
+#     unit_entry     => {
+#      'Description' => 'Trivial Container that will be very lazy',
+#     },
+#     service_entry       => {
+#       'TimeoutStartSec' => '900',
+#     },
+#     container_entry => {
+#       'Image' => 'quay.io/centos/centos:latest',
+#       'Exec'  => 'sh -c "sleep inf"'
+#     },
+#     install_entry   => {
+#       'WantedBy' => 'default.target'
+#     },
+#     active          => true,
+#   }
+#
+# @example Run a CentOS user Container without managing the aspects of the user
+#   quadlets::quadlet{'centos.container':
+#     ensure          => present,
+#     user            =>
+#      'name'          => 'containers',
+#      'create_dir'    => false,
+#      'manage_user'   => false,
+#      'manage_linger' => false,
+#     },
+#     unit_entry     => {
+#      'Description' => 'Trivial Container that will be very lazy',
+#     },
+#     service_entry       => {
+#       'TimeoutStartSec' => '900',
+#     },
+#     container_entry => {
+#       'Image' => 'quay.io/centos/centos:latest',
+#       'Exec'  => 'sh -c "sleep inf"'
+#     },
+#     install_entry   => {
+#       'WantedBy' => 'default.target'
+#     },
+#     active          => true,
+#   }
+#
 define quadlets::quadlet (
   Enum['present', 'absent'] $ensure = 'present',
   Quadlets::Quadlet_name $quadlet = $title,
@@ -116,19 +164,52 @@ define quadlets::quadlet (
   include quadlets
 
   if $user {
-    $file_owner = $user['name']
+    $username = $user['name']
     $file_group = pick($user['group'], $user['name'])
     $user_homedir = pick($user['homedir'], "/home/${user['name']}")
     $quadlet_file = "${user_homedir}/${quadlets::quadlet_user_dir}/${quadlet}"
+    $create_dir = pick($user['create_dir'], true)
+    $manage_user = pick($user['manage_user'], true)
+    $manage_linger = pick($user['manage_linger'], true)
+
+    if $create_dir {
+      $components = split($quadlets::quadlet_user_dir, '/')
+      $dirs = $components.reduce([]) |$accum, $part| {
+        $accum + [$accum ? {
+            []      => "${user_homedir}/${part}",
+            default => "${accum[-1]}/${part}"
+          }
+        ]
+      }
+      ensure_resource('file', $dirs, {
+          ensure => directory,
+          owner  => $username,
+          group  => $file_group,
+        }
+      )
+    }
+    if $manage_user {
+      ensure_resource('user', $username, {
+          ensure     => present,
+          managehome => true,
+        }
+      )
+    }
+    if $manage_linger {
+      ensure_resource('loginctl_user', $username, {
+          linger => enabled,
+        }
+      )
+    }
   } else {
     $quadlet_file = "${quadlets::quadlet_dir}/${quadlet}"
-    $file_owner = 'root'
+    $username = 'root'
     $file_group = 'root'
   }
 
   file { $quadlet_file:
     ensure  => $ensure,
-    owner   => $file_owner,
+    owner   => $username,
     group   => $file_group,
     mode    => $mode,
     content => epp('quadlets/quadlet_file.epp', {
