@@ -198,7 +198,11 @@ define quadlets::quadlet (
 
   if $user { # rootless container
     if $location == 'system' {
-      $_quadlet_dir = "${quadlets::quadlet_system_user_dir}/${user}"
+      ensure_resource('quadlets::user_system_dir', $user)
+      $_uid = $facts.dig('quadlets', 'users', $user, 'uid')
+      if $_uid {
+        $_quadlet_dir = "${quadlets::quadlet_system_user_dir}/${_uid}"
+      }
       $_file_user = 'root'
       $_file_group = 'root'
     } else { # home
@@ -212,73 +216,77 @@ define quadlets::quadlet (
     $_file_user = 'root'
     $_file_group = 'root'
   }
-  $_quadlet_file = "${_quadlet_dir}/${quadlet}"
 
-  # We can only validate a directory of quadlet files and the file extension of the new quadlet
-  # must be correct so we cannot test % directly :-(
-  #
-  # Create a new tmp directory and copy the new quadlet to validate it.
-  $_validate_cmd = $validate_quadlet ? {
-    true    => epp('quadlets/validate_cmd.epp', {
-      'quadlet' => $quadlet,
-      'is_user' => $user ? {
-        undef   => false,
-        default => true
-      },
-      'dest' => $_quadlet_dir,
-    }),
-    default => undef,
-  }
+  if !$user or ( $user and  $location == 'home' ) or ( $user and $location == 'system' and  $_uid )  {
+    $_quadlet_file = "${_quadlet_dir}/${quadlet}"
 
-  file { $_quadlet_file:
-    ensure       => $ensure,
-    owner        => $_file_user,
-    group        => $_file_group,
-    mode         => $mode,
-    validate_cmd => $_validate_cmd,
-    content      => epp('quadlets/quadlet_file.epp', {
-      'unit_entry'      => $unit_entry,
-      'service_entry'   => $service_entry,
-      'install_entry'   => $install_entry,
-      'container_entry' => $container_entry,
-      'volume_entry'    => $volume_entry,
-      'network_entry'   => $network_entry,
-      'pod_entry'       => $pod_entry,
-      'kube_entry'      => $kube_entry,
-      'image_entry'     => $image_entry,
-      'build_entry'     => $build_entry,
-    }),
-  }
+    # We can only validate a directory of quadlet files and the file extension of the new quadlet
+    # must be correct so we cannot test % directly :-(
+    #
+    # Create a new tmp directory and copy the new quadlet to validate it.
+    $_validate_cmd = $validate_quadlet ? {
+      true    => epp('quadlets/validate_cmd.epp', {
+        'quadlet' => $quadlet,
+        'is_user' => $user ? {
+          undef   => false,
+          default => true
+        },
+        'dest' => $_quadlet_dir,
+      }),
+      default => undef,
+    }
 
-  ensure_resource('systemd::daemon_reload', $quadlet, { 'user' => $user })
-  File[$_quadlet_file] ~> Systemd::Daemon_reload[$quadlet]
 
-  if $active != undef {
-    if $user {
-      systemd::user_service { $_service:
-        ensure => $active,
-        enable => $active,
-        user   => $user,
-      }
+    file { $_quadlet_file:
+      ensure       => $ensure,
+      owner        => $_file_user,
+      group        => $_file_group,
+      mode         => $mode,
+      validate_cmd => $_validate_cmd,
+      content      => epp('quadlets/quadlet_file.epp', {
+        'unit_entry'      => $unit_entry,
+        'service_entry'   => $service_entry,
+        'install_entry'   => $install_entry,
+        'container_entry' => $container_entry,
+        'volume_entry'    => $volume_entry,
+        'network_entry'   => $network_entry,
+        'pod_entry'       => $pod_entry,
+        'kube_entry'      => $kube_entry,
+        'image_entry'     => $image_entry,
+        'build_entry'     => $build_entry,
+      }),
+    }
 
-      if $ensure == 'absent' {
-        Systemd::User_service[$_service] -> File[$_quadlet_file]
-        File[$_quadlet_file] ~> Systemd::Daemon_reload[$quadlet]
+    ensure_resource('systemd::daemon_reload', $quadlet, { 'user' => $user })
+    File[$_quadlet_file] ~> Systemd::Daemon_reload[$quadlet]
+
+    if $active != undef {
+      if $user {
+        systemd::user_service { $_service:
+          ensure => $active,
+          enable => $active,
+          user   => $user,
+        }
+
+        if $ensure == 'absent' {
+          Systemd::User_service[$_service] -> File[$_quadlet_file]
+          File[$_quadlet_file] ~> Systemd::Daemon_reload[$quadlet]
+        } else {
+          File[$_quadlet_file] ~> Systemd::User_service[$_service]
+          Systemd::Daemon_reload[$quadlet] -> Systemd::User_service[$_service]
+        }
       } else {
-        File[$_quadlet_file] ~> Systemd::User_service[$_service]
-        Systemd::Daemon_reload[$quadlet] -> Systemd::User_service[$_service]
-      }
-    } else {
-      service { $_service:
-        ensure => $active,
-      }
+        service { $_service:
+          ensure => $active,
+        }
 
-      if $ensure == 'absent' {
-        Service[$_service] -> File[$_quadlet_file]
-        File[$_quadlet_file] ~> Systemd::Daemon_reload[$quadlet]
-      } else {
-        File[$_quadlet_file] ~> Service[$_service]
-        Systemd::Daemon_reload[$quadlet] -> Service[$_service]
+        if $ensure == 'absent' {
+          Service[$_service] -> File[$_quadlet_file]
+          File[$_quadlet_file] ~> Systemd::Daemon_reload[$quadlet]
+        } else {
+          File[$_quadlet_file] ~> Service[$_service]
+          Systemd::Daemon_reload[$quadlet] -> Service[$_service]
+        }
       }
     }
   }
