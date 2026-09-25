@@ -8,6 +8,7 @@
 # @param mode Filemode of container file.
 # @param active Make sure the container is running.
 # @param user Specify which user to run as. If `undef` the quadlet will run rootful.
+# @param uid Specify the uid of the user, this is required for rootless system path quadlets, i.e if `user` is defined and `location` is `system`.
 # @param group Specify which group should own the quadlets. If it is `undef` the `$user` parameter will be used.
 # @param homedir Specify home directory. If it `undef` then `/home/$user` will be used.
 # @param location Specifies the location to create the quadlet in. If `home` then `$home/.config/containers/systemd` will be used. If `system` then `/etc/containers/systemd/users/$user` will be used.
@@ -143,7 +144,7 @@ define quadlets::quadlet (
   Boolean $validate_quadlet = true,
   Stdlib::Filemode $mode = '0444',
   Optional[Boolean] $active = undef,
-  Optional[String[1]] $user = undef,
+  Optional[Variant[String[1],Integer[2,]]] $user = undef,
   Optional[String[1]] $group = undef,
   Optional[Stdlib::Unixpath] $homedir = undef,
   Enum['system','home'] $location = 'home',
@@ -198,7 +199,13 @@ define quadlets::quadlet (
 
   if $user { # rootless container
     if $location == 'system' {
-      $_quadlet_dir = "${quadlets::quadlet_system_user_dir}/${user}"
+
+      # If ever https://github.com/podman-container-tools/podman/issues/29838 is resolved this can be updated.
+      if $uid !~ Integer[2,] {
+        fail('For rootless containers in the system path the "uid" parameter must be specified')
+      }
+
+      $_quadlet_dir = "${quadlets::quadlet_system_user_dir}/${uid}"
       $_file_user = 'root'
       $_file_group = 'root'
     } else { # home

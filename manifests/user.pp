@@ -1,10 +1,11 @@
 # @summary Generate and manage podman quadlet user
 #
 # @param user Specify username
+# @param uid The UID of the user, this is required for creating rootless quadlets in the system path.
 # @param group Specify group ownership of quadlet directories, if `undef` it will be set equal to the username.
 # @param homedir Home directory, if `undef` `/home/$user` will be used.
 # @param create_dir If true the directory for podlets will be created at `$homedir/.config/containers/systemd`.
-# @param create_system_dir If true the directory `/etc/containers/systemd/user/$user` will be created.
+# @param create_system_dir If true the directory `/etc/containers/systemd/user/$user` will be created. The `uid` parameter must also be specified or else the option will do nothing.
 # @param manage_user If true the user and group will be created.
 # @param manage_linger If true `systemd --user` will be started for user.
 # @param subuid If defined as a pair of integers the user will have a subordintate user ID and a subordinate user ID count specified in `/etc/subuid`. Only one range per user is supported,
@@ -49,6 +50,7 @@
 #
 define quadlets::user (
   Optional[String[1]] $user = $name,
+  Optional[Integer[2,]] $uid = undef,
   Optional[String[1]] $group = undef,
   Optional[Stdlib::Unixpath] $homedir = undef,
   Boolean $create_dir = true,
@@ -58,15 +60,16 @@ define quadlets::user (
   Optional[Tuple[Integer[1],Integer[1]]] $subuid = undef,
   Optional[Tuple[Integer[1],Integer[1]]] $subgid = undef,
   Optional[Hash[String[1],Quadlets::Auth]] $authentications = undef,
-  Hash[Pattern[/\A(?!ensure$|gid$|home$|managehome$)[a-z_]+\z/],Any] $user_additional_params = {},
+  Hash[Pattern[/\A(?!uid|ensure$|gid$|home$|managehome$)[a-z_]+\z/],Any] $user_additional_params = {},
 ) {
   include quadlets
 
   $_group = pick($group, $user)
   $_user_homedir = pick($homedir, "/home/${user}")
 
-  if $create_system_dir {
-    file { "${quadlets::quadlet_system_user_dir}/${user}":
+  if $create_system_dir and $uid =~ Integer[2,] {
+
+    file { "${quadlets::quadlet_system_user_dir}/${uid}":
       ensure => directory,
       owner  => root,
       group  => root,
@@ -94,6 +97,7 @@ define quadlets::user (
     user { $user:
       * => {
         ensure     => present,
+        uid        => $uid,
         gid        => $_group,
         home       => $_user_homedir,
         managehome => true,
